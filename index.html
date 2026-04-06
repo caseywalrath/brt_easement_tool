@@ -112,6 +112,14 @@ const selectAllBtn = document.getElementById("select-all-btn");
 const clearAllBtn = document.getElementById("clear-all-btn");
 const resetViewBtn = document.getElementById("reset-view-btn");
 
+const CLEANUP_TEXT_PATTERNS = [
+  "no row impacts",
+  "no design here",
+  "no design on this parcel",
+  "design does not extend across this parcel",
+  "not along federal blvd"
+];
+
 function normalizeImpactCategory(value){
   const clean = String(value || "").trim();
   if (clean === "Extra High") return "Extra High";
@@ -137,8 +145,26 @@ function categoryClassName(category){ return String(category || "Other").toLower
 function countRowsByCategory(rows){ return rows.reduce((acc,row)=>{acc[row.impactCategory]=(acc[row.impactCategory]||0)+1;return acc;},{}); }
 function chunkArray(array,size){ const chunks=[]; for(let i=0;i<array.length;i+=size){chunks.push(array.slice(i,i+size));} return chunks; }
 function getHighestCategory(rows){ const cats = rows.map((row)=>row.impactCategory); for(const category of CONFIG.categoryOrder){ if(cats.includes(category)) return category; } return "Other"; }
-function joinUniqueValues(values, fallback="N/A"){ const unique=Array.from(new Set(values.map((v)=>String(v||"").trim()).filter(Boolean))); return unique.length ? unique.join(" | ") : fallback; }
-function formatValue(value){ const clean=String(value||"").trim(); return clean || "N/A"; }
+function hasMeaningfulText(value, additionalPlaceholders=[]){
+  const clean = String(value ?? "").trim();
+  if (!clean) return false;
+  const lower = clean.toLowerCase();
+  if (lower === "-" || lower === "n/a" || lower === "na") return false;
+  return !additionalPlaceholders.some((entry)=>lower === String(entry ?? "").trim().toLowerCase());
+}
+function joinUniqueValues(values, fallback="N/A"){
+  const unique = Array.from(new Set(values.map((value)=>String(value ?? "").trim()).filter((value)=>hasMeaningfulText(value))));
+  return unique.length ? unique.join(" | ") : fallback;
+}
+function formatValue(value){
+  const clean = String(value ?? "").trim();
+  return hasMeaningfulText(clean) ? clean : "N/A";
+}
+function getRecordTitle(record){
+  if (hasMeaningfulText(record.businessName)) return record.businessName;
+  if (hasMeaningfulText(record.siteAddress, ["not listed"])) return record.siteAddress;
+  return record.parcelNumber;
+}
 function escapeHtml(value){ return String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#39;"); }
 
 const cleanedRows = [];
@@ -147,7 +173,9 @@ ROW_IMPACTS.forEach((row,index)=>{
   const parcelNumber = String(row.parcelNumber || "").trim();
   const notes = String(row.notes || "").trim().toLowerCase();
   const business = String(row.businessName || "").trim().toLowerCase();
-  const exclude = parcelNumber.includes("X") || notes.includes("no row impacts") || notes.includes("no design here") || notes.includes("no design on this parcel") || business.includes("no row impacts") || business.includes("no design here");
+  const placeholderRow = !hasMeaningfulText(row.impactCategory) && !hasMeaningfulText(row.businessName) && !hasMeaningfulText(row.notes) && !hasMeaningfulText(row.siteAddress, ["not listed"]);
+  const cleanupRow = CLEANUP_TEXT_PATTERNS.some((pattern)=>notes.includes(pattern) || business.includes(pattern));
+  const exclude = parcelNumber.includes("X") || placeholderRow || cleanupRow;
   const normalizedRow = {...row, uid:`row-${index+1}`, parcelKeys:buildParcelLookupKeys(parcelNumber), impactCategory:normalizeImpactCategory(row.impactCategory)};
   if (exclude) excludedCleanupRows.push(normalizedRow); else cleanedRows.push(normalizedRow);
 });
@@ -367,7 +395,7 @@ function renderParcelDetails(feature, matchingRows, modeLabel){
   const recordsHtml = matchingRows.map((record)=>`
     <article class="record-card ${categoryClassName(record.impactCategory)}">
       <div class="record-top">
-        <div class="record-name">${escapeHtml(formatValue(record.businessName !== "N/A" ? record.businessName : record.siteAddress))}</div>
+        <div class="record-name">${escapeHtml(formatValue(getRecordTitle(record)))}</div>
         <span class="chip" style="background:${CONFIG.categoryColors[record.impactCategory] || CONFIG.categoryColors.Other}">${escapeHtml(record.impactCategory)}</span>
       </div>
       <div class="record-grid">
