@@ -8,10 +8,36 @@ export const CONFIG = {
   parcelQueryChunkSize: 40,
   statewideParcelServiceUrl:
     "https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/FeatureServer/0/query",
+  basemaps: [
+    {
+      id: "satellite",
+      label: "Satellite",
+      sourceType: "raster",
+      source: {
+        url: "mapbox://mapbox.satellite",
+        tileSize: 256,
+      },
+      attribution: "",
+      isDefault: true,
+    },
+    {
+      id: "streets",
+      label: "Streets",
+      sourceType: "raster",
+      source: {
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 19,
+      },
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      isDefault: false,
+    },
+  ],
   categoryOrder: ["Extra High", "High", "Medium", "Low", "Other"],
   categoryColors: {
     "Extra High": "#c62828",
-    High: "#ef5350",
+    High: "#8e24aa",
     Medium: "#fdd835",
     Low: "#1976d2",
     Other: "#78909c",

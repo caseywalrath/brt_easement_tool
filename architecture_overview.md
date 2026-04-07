@@ -71,6 +71,7 @@ These rules remain intentionally conservative. Rows with uncertain but still pot
 - The spreadsheet-to-JSON update workflow is still manual.
 - The app has no automated tests.
 - The Mapbox token remains committed in client-side configuration.
+- The basemap switcher currently defaults to Mapbox satellite and one free OSM streets option. Basemap choice does not persist across reloads.
 
 ## 2026-04-06 Modularization Pass
 
@@ -82,3 +83,19 @@ The same pass also:
 - moved styling into `styles.css`
 - split JavaScript into `src/config.js`, `src/data-model.js`, `src/parcel-service.js`, `src/map.js`, `src/ui.js`, and `src/app.js`
 - preserved the cleanup rules from the earlier cleanup pass
+
+## 2026-04-07 Visual Category Update
+
+This pass sets `Extra High` to red and `High` to purple.
+
+- `src/config.js` remains the authoritative runtime category-color mapping used by map fills and detail chips
+- `styles.css` mirrors those category colors for filter dots and record-card accents
+
+## 2026-04-07 Basemap Switcher Pass
+
+This pass added config-driven basemap support and a lower-right basemap switcher control.
+
+- `src/config.js` now defines the available basemaps and the default basemap
+- `src/map.js` initializes all configured basemap layers and switches them without resetting parcel state
+- `src/ui.js` owns the compact icon-triggered basemap menu
+- the app currently supports Mapbox satellite and OpenStreetMap streets

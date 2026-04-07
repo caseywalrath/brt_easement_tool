@@ -10,6 +10,7 @@ import { fetchAllParcelFeatures } from "./parcel-service.js";
 import {
   getDomRefs,
   hideTooltip,
+  initBasemapSwitcher,
   initFilterUi,
   renderDetailPlaceholder,
   renderMissingParcelList,
@@ -29,6 +30,7 @@ const state = {
   hoveredLookupKey: null,
   selectedLookupKey: null,
   syncCheckboxUi: () => {},
+  basemapSwitcher: null,
 };
 
 void initializeApp();
@@ -52,6 +54,12 @@ async function initializeApp() {
     state.syncCheckboxUi = filterUi.syncCheckboxUi;
 
     state.mapController = createMapController(CONFIG);
+    state.basemapSwitcher = initBasemapSwitcher({
+      basemaps: CONFIG.basemaps,
+      activeBasemapId: state.mapController.getActiveBasemap(),
+      onBasemapChange: handleBasemapChange,
+    });
+    state.mapController.addControl(state.basemapSwitcher, "bottom-right");
     state.mapController.onLoad(async () => {
       try {
         const parcelFeatures = await fetchAllParcelFeatures({
@@ -135,6 +143,12 @@ function handleClearAll() {
 
 function handleResetView() {
   if (state.mapController) state.mapController.resetView();
+}
+
+function handleBasemapChange(basemapId) {
+  if (!state.mapController || !state.basemapSwitcher) return;
+  state.mapController.setActiveBasemap(basemapId);
+  state.basemapSwitcher.syncActiveBasemap(state.mapController.getActiveBasemap());
 }
 
 function applyFilters() {
