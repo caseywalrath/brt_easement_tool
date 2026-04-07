@@ -67,6 +67,121 @@ export function renderDetailPlaceholder(parcelDetailsEl, detailPlaceholderText) 
   parcelDetailsEl.innerHTML = detailPlaceholderText;
 }
 
+export function initBasemapSwitcher({ basemaps, activeBasemapId, onBasemapChange }) {
+  let containerEl = null;
+  let toggleBtn = null;
+  let menuEl = null;
+  let menuItemButtons = [];
+  let isOpen = false;
+  let activeId = activeBasemapId;
+  let documentClickHandler = null;
+  let documentKeydownHandler = null;
+
+  function setMenuOpen(nextState) {
+    isOpen = nextState;
+    if (!toggleBtn || !menuEl) return;
+    toggleBtn.setAttribute("aria-expanded", String(nextState));
+    menuEl.hidden = !nextState;
+  }
+
+  function syncActiveBasemap(nextActiveBasemapId) {
+    activeId = nextActiveBasemapId;
+
+    const activeBasemap = basemaps.find((basemap) => basemap.id === activeId);
+    if (toggleBtn) {
+      const basemapLabel = activeBasemap?.label || "Basemap";
+      toggleBtn.setAttribute("aria-label", `Basemap switcher. Current basemap: ${basemapLabel}.`);
+      toggleBtn.title = `Basemap: ${basemapLabel}`;
+    }
+
+    menuItemButtons.forEach((button) => {
+      const isActive = button.dataset.basemapId === activeId;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-checked", String(isActive));
+      const indicatorEl = button.querySelector(".basemap-option-indicator");
+      if (indicatorEl) indicatorEl.textContent = isActive ? "Selected" : "";
+    });
+  }
+
+  function buildMenuItems() {
+    menuItemButtons = basemaps.map((basemap) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "basemap-option";
+      button.dataset.basemapId = basemap.id;
+      button.setAttribute("role", "menuitemradio");
+      button.innerHTML =
+        `<span class="basemap-option-label">${escapeHtml(basemap.label)}</span>` +
+        `<span class="basemap-option-indicator" aria-hidden="true"></span>`;
+      button.addEventListener("click", () => {
+        onBasemapChange(basemap.id);
+        syncActiveBasemap(basemap.id);
+        setMenuOpen(false);
+      });
+      return button;
+    });
+
+    menuItemButtons.forEach((button) => menuEl.appendChild(button));
+  }
+
+  return {
+    onAdd() {
+      containerEl = document.createElement("div");
+      containerEl.className = "mapboxgl-ctrl basemap-switcher";
+
+      toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "basemap-toggle";
+      toggleBtn.setAttribute("aria-haspopup", "menu");
+      toggleBtn.innerHTML =
+        `<span class="basemap-toggle-icon" aria-hidden="true">` +
+        `<span></span><span></span><span></span>` +
+        `</span>` +
+        `<span class="visually-hidden">Open basemap options</span>`;
+      toggleBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setMenuOpen(!isOpen);
+      });
+
+      menuEl = document.createElement("div");
+      menuEl.className = "basemap-menu";
+      menuEl.setAttribute("role", "menu");
+      menuEl.hidden = true;
+
+      buildMenuItems();
+      syncActiveBasemap(activeId);
+
+      containerEl.appendChild(menuEl);
+      containerEl.appendChild(toggleBtn);
+      containerEl.addEventListener("click", (event) => event.stopPropagation());
+
+      documentClickHandler = (event) => {
+        if (containerEl && !containerEl.contains(event.target)) {
+          setMenuOpen(false);
+        }
+      };
+      documentKeydownHandler = (event) => {
+        if (event.key === "Escape") setMenuOpen(false);
+      };
+
+      document.addEventListener("click", documentClickHandler);
+      document.addEventListener("keydown", documentKeydownHandler);
+
+      return containerEl;
+    },
+    onRemove() {
+      document.removeEventListener("click", documentClickHandler);
+      document.removeEventListener("keydown", documentKeydownHandler);
+      containerEl?.remove();
+      containerEl = null;
+      toggleBtn = null;
+      menuEl = null;
+      menuItemButtons = [];
+    },
+    syncActiveBasemap,
+  };
+}
+
 export function renderStatusBox(statusBoxEl, { mappedCount, unmatchedCount, excludedCount }) {
   statusBoxEl.innerHTML =
     `<strong>Query complete.</strong><br />` +

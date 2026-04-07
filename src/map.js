@@ -1,19 +1,11 @@
 export function createMapController(config) {
   mapboxgl.accessToken = config.mapboxToken;
+  const basemaps = Array.isArray(config.basemaps) ? config.basemaps : [];
+  let activeBasemapId = getDefaultBasemapId(basemaps);
 
   const map = new mapboxgl.Map({
     container: "map",
-    style: {
-      version: 8,
-      sources: {
-        "mapbox-satellite": {
-          type: "raster",
-          url: "mapbox://mapbox.satellite",
-          tileSize: 256,
-        },
-      },
-      layers: [{ id: "satellite-layer", type: "raster", source: "mapbox-satellite" }],
-    },
+    style: buildBaseStyle(basemaps, activeBasemapId),
     center: config.initialCenter,
     zoom: config.initialZoom,
     pitch: config.initialPitch,
@@ -135,10 +127,33 @@ export function createMapController(config) {
     });
   }
 
+  function setActiveBasemap(basemapId) {
+    if (!basemaps.some((basemap) => basemap.id === basemapId)) return;
+
+    activeBasemapId = basemapId;
+    if (!map.isStyleLoaded()) return;
+
+    basemaps.forEach((basemap) => {
+      const layerId = getBasemapLayerId(basemap.id);
+      if (!map.getLayer(layerId)) return;
+      map.setLayoutProperty(
+        layerId,
+        "visibility",
+        basemap.id === activeBasemapId ? "visible" : "none",
+      );
+    });
+  }
+
   return {
     map,
     onLoad(callback) {
-      map.on("load", callback);
+      map.on("load", () => {
+        setActiveBasemap(activeBasemapId);
+        callback();
+      });
+    },
+    addControl(control, position) {
+      map.addControl(control, position);
     },
     addParcelLayers,
     bindParcelInteractions,
@@ -148,6 +163,10 @@ export function createMapController(config) {
     fitMapToFeatures,
     queryVisibleFeatureAtPoint,
     resetView,
+    setActiveBasemap,
+    getActiveBasemap() {
+      return activeBasemapId;
+    },
     getCanvas() {
       return map.getCanvas();
     },
@@ -155,6 +174,45 @@ export function createMapController(config) {
       return map.getContainer();
     },
   };
+}
+
+function buildBaseStyle(basemaps, activeBasemapId) {
+  const sources = {};
+  const layers = [];
+
+  basemaps.forEach((basemap) => {
+    sources[getBasemapSourceId(basemap.id)] = {
+      type: basemap.sourceType,
+      ...basemap.source,
+      ...(basemap.attribution ? { attribution: basemap.attribution } : {}),
+    };
+    layers.push({
+      id: getBasemapLayerId(basemap.id),
+      type: basemap.sourceType,
+      source: getBasemapSourceId(basemap.id),
+      layout: {
+        visibility: basemap.id === activeBasemapId ? "visible" : "none",
+      },
+    });
+  });
+
+  return {
+    version: 8,
+    sources,
+    layers,
+  };
+}
+
+function getDefaultBasemapId(basemaps) {
+  return basemaps.find((basemap) => basemap.isDefault)?.id || basemaps[0]?.id || null;
+}
+
+function getBasemapSourceId(basemapId) {
+  return `basemap-source-${basemapId}`;
+}
+
+function getBasemapLayerId(basemapId) {
+  return `basemap-layer-${basemapId}`;
 }
 
 function extendBoundsWithGeometry(bounds, geometry) {
