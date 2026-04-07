@@ -1,80 +1,184 @@
-# brt_easement_tool
+# Federal BRT Easement Impacts
 
-Federal BRT Easement Impacts App
-README / Developer Handoff
-Purpose. This document explains what the web app does, how it is structured, where its data comes from, how parcel matching works, known issues, and what a future developer should know before making changes.
-1. App summary
-The app is an internal stakeholder-facing map for the Federal Boulevard BRT corridor in Denver, Colorado.
-It shows parcel polygons along the corridor and links each parcel to construction easement impact information from the ROW impacts spreadsheet.
-Users can filter parcels by impact category, hover over parcels to see quick information, and click parcels to lock full details in the sidebar.
-2. Main features
-•	Mapbox aerial imagery basemap.
-•	Parcel polygons loaded from the Colorado statewide public parcel layer.
-•	Impact category filters: Extra High, High, Medium, Low, and Other.
-•	Hover tooltip showing Site Address, Property Type, and Business Name/Property Label.
-•	Click-to-lock parcel details in the sidebar until the user clicks elsewhere.
-•	Data status panel showing loaded parcel count and unmatched parcel IDs.
-•	Full spreadsheet support, including duplicate parcel rows tied to the same parcel.
-3. Tech stack
-•	Plain HTML, CSS, and JavaScript in a single index.html file.
-•	Mapbox GL JS for the map.
-•	Colorado statewide parcel FeatureServer for parcel geometry.
-•	Embedded spreadsheet data converted into a JavaScript array inside the HTML file.
-4. Data sources
-Primary project spreadsheet
-•	Source file used for the current working app: ROW Impacts_v2.xlsx.
-•	Column A contains parcel numbers.
-•	Column B contains impact categories.
-•	Other columns provide the values used in parcel detail panels and tooltips.
-Public parcel geometry
-•	Primary geometry source: Colorado statewide public parcel layer.
-•	The app queries the public ArcGIS FeatureServer using parcel IDs from the spreadsheet.
-•	Only parcels from the spreadsheet are requested. The app does not draw the full statewide parcel inventory.
-5. Important known issues and lessons learned
-5.1 Original spreadsheet parcel numbers were missing a leading zero
-•	The original ROW impacts spreadsheet did not always match public parcel records exactly.
-•	For many parcels, especially Denver parcels, the spreadsheet value was missing a leading zero.
-•	Example: original spreadsheet parcel number 232419024000 needed to be corrected to 0232419024000.
-•	Because of this, many parcels in the original spreadsheet could not be matched reliably to the public parcel dataset.
-•	This issue was corrected in ROW Impacts_v2.xlsx.
-•	The current app preserves leading zeros in the JavaScript logic and should not strip them.
-5.2 Browser requests to the parcel service could fail
-•	A second issue appeared even after parcel numbers were corrected.
-•	The browser sometimes returned: “Parcel loading issue. The statewide parcel service could not be reached or returned an unexpected response. Error: Failed to fetch.”
-•	This was not only a parcel formatting issue. It was also a front-end request issue when calling the public Colorado parcel service directly from the browser.
-•	The working version uses a safer browser-side fallback request pattern rather than relying only on a simple direct fetch call.
-5.3 Cleanup / invalid rows
-•	Some spreadsheet rows were effectively cleanup cases, placeholders, or rows with notes such as “No ROW impacts here” or “No design here anymore.”
-•	Those rows should not be treated as standard mappable parcels.
-•	Future spreadsheet updates should continue to distinguish real parcel rows from cleanup rows.
-6. How the app is organized
-•	CONFIG section: Mapbox token, map defaults, service URL, category order, and category colors.
-•	ROW_IMPACTS data section: embedded spreadsheet records used to drive the parcel joins and parcel detail content.
-•	Map setup section: initializes the map and parcel layers.
-•	Data fetching section: queries the parcel service and converts returned features into map-ready GeoJSON.
-•	Filter section: controls which parcels are visible.
-•	Interaction section: hover behavior, click-to-lock behavior, and detail rendering.
-7. Fields a future developer will most likely edit
-•	Mapbox token.
-•	Impact colors.
-•	Sidebar labels and wording.
-•	Tooltip fields.
-•	Parcel detail fields.
-•	Spreadsheet import / update process when a new ROW spreadsheet is issued.
-•	Cleanup-row exclusion logic.
-•	Map starting center and zoom.
-8. Recommended handoff instructions
-•	Keep the latest working app as a downloadable index.html file, not only in canvas.
-•	Treat ROW Impacts_v2.xlsx as the corrected baseline spreadsheet unless a newer version supersedes it.
-•	When updating parcel data, verify that leading zeros are preserved.
-•	If parcel loading breaks again, test the public parcel-service request path first before assuming parcel IDs are wrong.
-•	Keep one authoritative working HTML file to avoid confusion between older experimental versions and the current version.
-9. Is this enough information for a new developer?
-Mostly yes, for a practical handoff. A new developer should be able to understand the app purpose, the core data flow, the major known issues, and the likely places to edit the code. However, the handoff would be stronger if the following items are stored alongside this README:
-•	The final approved working index.html file.
-•	The exact current spreadsheet used to generate the embedded data.
-•	A short changelog showing major app versions and fixes.
-•	A note identifying which file is the current production version.
-•	Optional: a small script or documented process for regenerating the embedded JavaScript dataset from a new spreadsheet.
-10. Suggested next improvement
-The best future improvement would be to separate the spreadsheet conversion process from the HTML file so that new spreadsheet versions can be imported more reliably without manually rebuilding the embedded data block each time.
+## Purpose
+
+This repository contains a static web app for internal review of Federal Boulevard BRT easement impacts in the Denver corridor.
+
+The app displays parcel geometry from the Colorado public parcel service and joins those parcels to spreadsheet-derived impact records stored in a committed JSON data file.
+
+## Current Status
+
+The app is no longer a single-file implementation.
+
+It now uses:
+- `index.html` as the page shell
+- `styles.css` for presentation
+- `src/*.js` ES modules for runtime logic
+- `data/row-impacts.json` as the authoritative runtime dataset
+
+The workbook `ROW Impacts_v2.xlsx` is retained as an archival reference only. It is not loaded directly by the browser at runtime.
+
+## Main Features
+
+- Mapbox satellite basemap
+- Parcel polygons loaded from the Colorado statewide public parcel layer
+- Impact category filters: Extra High, High, Medium, Low, and Other
+- Hover tooltip with parcel summary information
+- Click-to-lock parcel details in the sidebar
+- Support for multiple spreadsheet rows tied to the same parcel
+- Cleanup-row exclusion before parcel queries are sent
+- Unmatched parcel reporting
+- Leading-zero parcel matching support
+
+## Repository Layout
+
+- `index.html`: authoritative page shell
+- `styles.css`: application styling
+- `src/app.js`: runtime entrypoint and state owner
+- `src/config.js`: configuration values
+- `src/data-model.js`: cleanup rules, normalization, parcel lookup-key generation, and formatting helpers
+- `src/parcel-service.js`: ArcGIS parcel queries and JSONP fallback
+- `src/map.js`: Mapbox setup, parcel layers, outline behavior, and map viewport control
+- `src/ui.js`: filter UI, tooltip, detail rendering, and status rendering
+- `data/row-impacts.json`: authoritative runtime dataset
+- `ROW Impacts_v2.xlsx`: archival spreadsheet reference
+- `prompt.md`: original LLM generation prompt
+- `architecture_overview.md`: architecture and maintenance notes
+
+## Runtime Data Contract
+
+The browser loads `data/row-impacts.json` at runtime.
+
+That file must remain a JSON array of row objects using the current field set, including:
+- `parcelNumber`
+- `impactCategory`
+- `station`
+- `county`
+- `siteAddress`
+- `propertyType`
+- `businessName`
+- `opportunityToRestripe`
+- `restripingOptions`
+- `widthFromBOWToBuilding`
+- `originalOrder`
+- `rollPlotViewport`
+- `designSegment`
+- `notes`
+- `sourceRow`
+
+If this structure changes, the app logic in `src/data-model.js`, `src/app.js`, and `src/ui.js` will need to be updated.
+
+## How The App Works
+
+1. `src/app.js` loads `data/row-impacts.json`.
+2. `src/data-model.js` normalizes impact categories, expands parcel lookup keys, and excludes cleanup rows.
+3. `src/parcel-service.js` queries the Colorado parcel service for only the parcel IDs present in the runtime dataset.
+4. Returned parcel features are matched back to the normalized rows.
+5. `src/map.js` renders parcel polygons and interaction outlines in Mapbox.
+6. `src/ui.js` renders filter controls, hover tooltips, detail cards, and data status messages.
+
+## Cleanup Rules
+
+The current cleanup logic excludes rows that are clearly not intended to map.
+
+Excluded cases include:
+- placeholder parcel IDs containing `X`
+- placeholder rows with no impact category, no business name, no notes, and `NOT LISTED` address data
+- rows whose notes or labels indicate:
+- `no ROW impacts`
+- `no design here`
+- `no design on this parcel`
+- `design does not extend across this parcel`
+- `property not along Federal Boulevard`
+
+These rules are intentionally conservative. Rows with uncertain but still potentially valid notes remain in the dataset.
+
+## Known Issues And Constraints
+
+- The spreadsheet-to-JSON update workflow is still manual.
+- The app has no automated tests.
+- The app depends on a live public parcel service.
+- The parcel-service integration may still fail in some browser/network conditions even with JSONP fallback.
+- The Mapbox token is committed in client-side configuration.
+- The app must be served over HTTP or HTTPS. Direct `file://` opening is not supported.
+
+## Important Historical Issues
+
+### Leading zeros in parcel IDs
+
+Previous spreadsheet versions did not always preserve parcel numbers exactly.
+
+This was especially important for Denver parcels. Example:
+- spreadsheet value: `232419024000`
+- corrected parcel value: `0232419024000`
+
+The current logic preserves leading zeros and also generates lookup-key variants to improve matching. Do not strip leading zeros during future data updates.
+
+### Browser access to the parcel service
+
+The statewide parcel service may reject or fail browser requests intermittently.
+
+The current implementation:
+- attempts `fetch(...&f=geojson)` first
+- falls back to JSONP with `f=pjson` if the primary path fails
+
+If parcel loading breaks again, test the parcel-service request path before assuming parcel IDs are wrong.
+
+## How To Run Locally
+
+The app must be served from a local HTTP server.
+
+Example using Python:
+
+1. Open a terminal in the repository root.
+2. Run:
+   `python -m http.server 8123`
+3. Open:
+   `http://127.0.0.1:8123/index.html`
+
+Do not open `index.html` directly from disk.
+
+## How To Update The Data
+
+Current process:
+1. Start with the latest spreadsheet source.
+2. Preserve parcel numbers exactly, including leading zeros.
+3. Preserve the current field set expected by `data/row-impacts.json`.
+4. Regenerate or manually update `data/row-impacts.json`.
+5. Verify that cleanup rows are still excluded correctly.
+6. Serve the app locally over HTTP.
+7. Confirm filters, parcel loading, tooltip content, sidebar details, and unmatched parcel reporting still behave correctly.
+
+At present there is no committed spreadsheet-to-JSON conversion script. That is still a recommended improvement.
+
+## Minimum Validation Checklist
+
+Before merging future changes, verify:
+- the page loads over HTTP without a data-loading error
+- filter counts render
+- parcel polygons appear
+- hover tooltip works
+- click-to-lock parcel details works
+- at least one parcel with multiple rows renders multiple detail cards
+- unmatched parcel reporting still appears in the status area
+- missing business names fall back to site address or parcel number
+
+## GitHub Workflow
+
+Recommended workflow:
+1. Create a feature branch from `main`
+2. Make the change on that branch
+3. Open a pull request into `main`
+4. Review the diff
+5. Merge the pull request
+6. Delete the feature branch after merge
+
+Avoid making substantive edits directly on `main`.
+
+## Recommended Next Improvements
+
+- Add a repeatable spreadsheet-to-JSON conversion script
+- Add basic validation for `data/row-impacts.json`
+- Add a lightweight smoke test for app boot and data loading
+- Decide whether to keep the Mapbox token committed in client-side configuration
+- Consider a cached parcel-geometry path if the live public service remains unstable
