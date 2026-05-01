@@ -193,6 +193,19 @@ Each team's sheet is published to the web (File → Share → Publish to web →
 - Editing in the web app: no, editing happens in Sheets.
 - Implementation effort: low. One fetch per team's sheet plus a join.
 
+#### Aside: protecting a Sheets-based dataset
+
+Google Sheets has no "password" the web app can present as a credential. The moment a sheet is readable by an unauthenticated client, it is effectively public to anyone who learns the URL. If the data needs more than that - meaning we cannot accept "don't share the URL" as the security model - the realistic options, in increasing effort, are:
+
+1. **Google Apps Script proxy.** Keep the sheet private under default Drive sharing. Deploy a short Apps Script that reads the sheet and returns JSON, set to "Execute as: me, Access: anyone." The app fetches that endpoint instead of the sheet. The script can require a shared-secret token in the request and reject calls without it. This is not real authentication - anyone who reads the token off the page can hit the endpoint - but the sheet itself stays private and the token can be rotated. Free, no infrastructure.
+2. **Site-level gate in front of the static app.** Put the whole app behind Cloudflare Access, Netlify password protection, or similar. The sheet can stay published-to-web; the published CSV URL is only ever fetched from inside an authenticated session. Cloudflare Access has a free tier with email-based gating. This protects the app, not the sheet - if the CSV URL leaks, it remains readable - so it is layered defense, not a tight one.
+3. **Per-user Google sign-in (OAuth).** Each viewer signs in with their Google account; the web app uses their token to read the sheet. The sheet is shared only with the org or a specific Google group. This is the only option here that gives genuine, per-user, revocable read protection. It also adds a real OAuth flow to the static app, which is the most complex of these.
+4. **Backend proxy.** A tiny server (Cloudflare Worker, Vercel function) holds Google credentials, fetches the sheet, exposes it behind whatever auth we want. Strongest control, but contradicts the "no server" constraint and is out for now.
+
+Practical takeaway: if Sheets needs more than obscurity-level protection, the cheapest real answer is **Apps Script proxy plus Cloudflare Access in front of the site**. If even that is not enough - meaning the data is genuinely sensitive - Sheets stops being the right backend, and Option D below becomes the more honest path because it has actual row-level auth built in.
+
+The same protection options apply to Option F (Sheets-to-JSON sync), with one twist: in Option F the sync job already runs as an authenticated identity, so the source sheet can stay fully private without any proxy. The exposure is then on the *output* JSON instead, which is gated by whatever protects the static site.
+
 **Option B: Airtable**
 
 Each team's data lives in an Airtable base. The app reads via Airtable's REST API with a token.
@@ -272,7 +285,7 @@ Two-step plan:
 
 2. **Next**: prototype Option F (Sheets → cron → JSON) on a single team's data - probably outreach, where data is most operational and the team is most actively waiting on changes. If it holds up, expand to other teams. If it does not, the default path is unchanged and nothing is lost.
 
-Avoid Option A unless we are certain the data is non-sensitive. Avoid Options D/E until the team is past the prototyping phase and has a clear, validated need for real-time edits or per-team write permissions. They are powerful but the wrong place to start.
+Avoid Option A in its plain published-CSV form unless we are certain the data is non-sensitive; if Sheets is otherwise the right fit but the data is sensitive, the Apps Script proxy described in the protection aside is the lightest viable variant. Avoid Options D/E until the team is past the prototyping phase and has a clear, validated need for real-time edits or per-team write permissions. They are powerful but the wrong place to start.
 
 ### Risks and open questions for Part 2
 
