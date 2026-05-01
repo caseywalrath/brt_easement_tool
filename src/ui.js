@@ -1,14 +1,18 @@
 import {
-  categoryClassName,
   escapeHtml,
   formatValue,
-  getHighestCategory,
   getRecordTitle,
+  getRollupValue,
+  getValueColor,
   joinUniqueValues,
+  valueClassName,
 } from "./data-model.js";
 
 export function getDomRefs(documentRef = document) {
   return {
+    schemeSwitcherEl: documentRef.getElementById("scheme-switcher"),
+    schemeLabelEl: documentRef.getElementById("active-scheme-label"),
+    schemeHelperTextEl: documentRef.getElementById("scheme-helper-text"),
     filterListEl: documentRef.getElementById("filter-list"),
     parcelDetailsEl: documentRef.getElementById("parcel-details"),
     statusBoxEl: documentRef.getElementById("status-box"),
@@ -20,47 +24,92 @@ export function getDomRefs(documentRef = document) {
   };
 }
 
+export function initSchemeSwitcher({ dom, schemes, activeSchemeId, onSchemeChange }) {
+  dom.schemeSwitcherEl.innerHTML = "";
+
+  const select = document.createElement("select");
+  select.className = "scheme-select";
+  select.setAttribute("aria-label", "Active display dimension");
+
+  schemes.forEach((scheme) => {
+    const option = document.createElement("option");
+    option.value = scheme.id;
+    option.textContent = scheme.label;
+    if (scheme.id === activeSchemeId) option.selected = true;
+    select.appendChild(option);
+  });
+
+  select.addEventListener("change", () => onSchemeChange(select.value));
+  dom.schemeSwitcherEl.appendChild(select);
+
+  return {
+    syncActiveScheme(schemeId) {
+      select.value = schemeId;
+    },
+  };
+}
+
+export function renderSchemeHeader({ dom, scheme }) {
+  if (dom.schemeLabelEl) dom.schemeLabelEl.textContent = scheme.label;
+  if (dom.schemeHelperTextEl) {
+    dom.schemeHelperTextEl.textContent = scheme.helperText || "";
+  }
+}
+
 export function initFilterUi({
   dom,
-  categoryOrder,
-  categoryCounts,
-  selectedCategories,
-  onCategoryChange,
+  scheme,
+  counts,
+  selectedValues,
+  onValueChange,
   onSelectAll,
   onClearAll,
   onResetView,
 }) {
-  dom.filterListEl.innerHTML = "";
-
-  categoryOrder.forEach((category) => {
-    const rowElement = document.createElement("label");
-    rowElement.className = "checkbox-row";
-    rowElement.innerHTML =
-      `<div class="checkbox-row-left">` +
-      `<input type="checkbox" value="${category}" checked />` +
-      `<span class="impact-dot ${categoryClassName(category)}"></span>` +
-      `<span>${category}</span>` +
-      `</div>` +
-      `<span class="count-pill">${categoryCounts[category] || 0}</span>`;
-
-    const checkbox = rowElement.querySelector("input");
-    checkbox.addEventListener("change", () => onCategoryChange(category, checkbox.checked));
-    dom.filterListEl.appendChild(rowElement);
-  });
+  renderFilterList({ dom, scheme, counts, selectedValues, onValueChange });
 
   dom.selectAllBtn.addEventListener("click", onSelectAll);
   dom.clearAllBtn.addEventListener("click", onClearAll);
   dom.resetViewBtn.addEventListener("click", onResetView);
 
   return {
-    syncCheckboxUi() {
+    syncCheckboxUi(currentSelectedValues) {
       dom.filterListEl
         .querySelectorAll("input[type='checkbox']")
         .forEach((checkbox) => {
-          checkbox.checked = selectedCategories.has(checkbox.value);
+          checkbox.checked = currentSelectedValues.has(checkbox.value);
         });
     },
+    rerenderFilterList(nextScheme, nextCounts, nextSelectedValues, nextOnValueChange) {
+      renderFilterList({
+        dom,
+        scheme: nextScheme,
+        counts: nextCounts,
+        selectedValues: nextSelectedValues,
+        onValueChange: nextOnValueChange,
+      });
+    },
   };
+}
+
+function renderFilterList({ dom, scheme, counts, selectedValues, onValueChange }) {
+  dom.filterListEl.innerHTML = "";
+
+  scheme.values.forEach((entry) => {
+    const rowElement = document.createElement("label");
+    rowElement.className = "checkbox-row";
+    rowElement.innerHTML =
+      `<div class="checkbox-row-left">` +
+      `<input type="checkbox" value="${escapeHtml(entry.id)}"${selectedValues.has(entry.id) ? " checked" : ""} />` +
+      `<span class="scheme-dot" style="background:${escapeHtml(entry.color)}"></span>` +
+      `<span>${escapeHtml(entry.id)}</span>` +
+      `</div>` +
+      `<span class="count-pill">${counts[entry.id] || 0}</span>`;
+
+    const checkbox = rowElement.querySelector("input");
+    checkbox.addEventListener("change", () => onValueChange(entry.id, checkbox.checked));
+    dom.filterListEl.appendChild(rowElement);
+  });
 }
 
 export function renderDetailPlaceholder(parcelDetailsEl, detailPlaceholderText) {
@@ -249,8 +298,7 @@ export function renderParcelDetails({
   feature,
   matchingRows,
   modeLabel,
-  categoryColors,
-  categoryOrder,
+  activeScheme,
 }) {
   const parcelId = feature.properties?.parcelDisplayId || "Unknown";
   const county = feature.properties?.countyName || "";
@@ -258,14 +306,17 @@ export function renderParcelDetails({
     [feature.properties?.serviceAddress, ...matchingRows.map((row) => row.siteAddress)],
     "Address not available",
   );
-  const highestImpact = getHighestCategory(matchingRows, categoryOrder);
+  const rollupValue = getRollupValue(matchingRows, activeScheme);
+  const rollupColor = getValueColor(activeScheme, rollupValue);
   const recordsHtml = matchingRows
-    .map(
-      (record) => `
-    <article class="record-card ${categoryClassName(record.impactCategory)}">
+    .map((record) => {
+      const recordValue = record[activeScheme.field] || activeScheme.fallbackValueId;
+      const recordColor = getValueColor(activeScheme, recordValue);
+      return `
+    <article class="record-card" data-scheme-value="${escapeHtml(valueClassName(recordValue))}" style="border-left-color:${escapeHtml(recordColor)}">
       <div class="record-top">
         <div class="record-name">${escapeHtml(formatValue(getRecordTitle(record)))}</div>
-        <span class="chip" style="background:${categoryColors[record.impactCategory] || categoryColors.Other}">${escapeHtml(record.impactCategory)}</span>
+        <span class="chip" style="background:${escapeHtml(recordColor)}">${escapeHtml(recordValue)}</span>
       </div>
       <div class="record-grid">
         <div><span class="field-label">Site Address</span><span class="field-value">${escapeHtml(formatValue(record.siteAddress))}</span></div>
@@ -281,17 +332,17 @@ export function renderParcelDetails({
         <div><span class="field-label">Spreadsheet Parcel ID</span><span class="field-value">${escapeHtml(formatValue(record.parcelNumber))}</span></div>
       </div>
       <div class="notes-box"><span class="field-label">Notes</span>${escapeHtml(formatValue(record.notes))}</div>
-    </article>`,
-    )
+    </article>`;
+    })
     .join("");
 
   const subtitle = `${escapeHtml(address)}${county ? " &middot; " + escapeHtml(county) + " County" : ""}`;
-  const summaryChip = `${escapeHtml(modeLabel)} &middot; ${escapeHtml(highestImpact)}`;
+  const summaryChip = `${escapeHtml(modeLabel)} &middot; ${escapeHtml(rollupValue)}`;
 
   parcelDetailsEl.innerHTML =
     `<div class="parcel-header">` +
     `<div><h3 class="parcel-title">${escapeHtml(parcelId)}</h3><p class="parcel-subtitle">${subtitle}</p></div>` +
-    `<span class="chip" style="background:${categoryColors[highestImpact] || categoryColors.Other}">${summaryChip}</span>` +
+    `<span class="chip" style="background:${escapeHtml(rollupColor)}">${summaryChip}</span>` +
     `</div>` +
     `<div class="helper-text" style="margin:0 0 12px 0;">Showing <strong>${matchingRows.length}</strong> spreadsheet row(s) tied to this parcel.</div>` +
     `<div class="records-stack">${recordsHtml}</div>`;

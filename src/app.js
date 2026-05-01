@@ -1,7 +1,8 @@
 import { CONFIG } from "./config.js";
 import {
-  getHighestCategory,
   getMatchingRowsForFeature,
+  getRollupValue,
+  getSchemeById,
   getUnmatchedParcelIds,
   prepareImpactData,
 } from "./data-model.js";
@@ -12,9 +13,11 @@ import {
   hideTooltip,
   initBasemapSwitcher,
   initFilterUi,
+  initSchemeSwitcher,
   renderDetailPlaceholder,
   renderMissingParcelList,
   renderParcelDetails,
+  renderSchemeHeader,
   renderStatusBox,
   renderStatusError,
   renderTooltip,
@@ -23,35 +26,63 @@ import {
 const dom = getDomRefs();
 
 const state = {
-  selectedCategories: new Set(CONFIG.categoryOrder),
+  activeSchemeId: CONFIG.defaultSchemeId,
+  filterSelectionsBySchemeId: buildInitialFilterSelections(CONFIG.schemes),
   mapController: null,
   dataModel: null,
   parcelGeoJson: { type: "FeatureCollection", features: [] },
   hoveredLookupKey: null,
   selectedLookupKey: null,
-  syncCheckboxUi: () => {},
+  filterUi: null,
+  schemeSwitcher: null,
   basemapSwitcher: null,
 };
 
 void initializeApp();
+
+function buildInitialFilterSelections(schemes) {
+  const map = new Map();
+  schemes.forEach((scheme) => {
+    map.set(scheme.id, new Set(scheme.values.map((entry) => entry.id)));
+  });
+  return map;
+}
+
+function getActiveScheme() {
+  return getSchemeById(CONFIG.schemes, state.activeSchemeId);
+}
+
+function getActiveSelections() {
+  return state.filterSelectionsBySchemeId.get(state.activeSchemeId);
+}
 
 async function initializeApp() {
   renderDetailPlaceholder(dom.parcelDetailsEl, CONFIG.detailPlaceholderText);
 
   try {
     const rawRows = await loadImpactRows(CONFIG.dataUrl);
-    state.dataModel = prepareImpactData(rawRows);
-    const filterUi = initFilterUi({
+    state.dataModel = prepareImpactData(rawRows, CONFIG.schemes);
+
+    state.schemeSwitcher = initSchemeSwitcher({
       dom,
-      categoryOrder: CONFIG.categoryOrder,
-      categoryCounts: state.dataModel.categoryCounts,
-      selectedCategories: state.selectedCategories,
-      onCategoryChange: handleCategoryChange,
+      schemes: CONFIG.schemes,
+      activeSchemeId: state.activeSchemeId,
+      onSchemeChange: handleSchemeChange,
+    });
+
+    const activeScheme = getActiveScheme();
+    renderSchemeHeader({ dom, scheme: activeScheme });
+
+    state.filterUi = initFilterUi({
+      dom,
+      scheme: activeScheme,
+      counts: state.dataModel.countsBySchemeId.get(activeScheme.id) || {},
+      selectedValues: getActiveSelections(),
+      onValueChange: handleValueChange,
       onSelectAll: handleSelectAll,
       onClearAll: handleClearAll,
       onResetView: handleResetView,
     });
-    state.syncCheckboxUi = filterUi.syncCheckboxUi;
 
     state.mapController = createMapController(CONFIG);
     state.basemapSwitcher = initBasemapSwitcher({
@@ -65,6 +96,7 @@ async function initializeApp() {
         const parcelFeatures = await fetchAllParcelFeatures({
           config: CONFIG,
           rowLookupByParcelKey: state.dataModel.rowLookupByParcelKey,
+          defaultScheme: activeScheme,
         });
 
         state.parcelGeoJson = {
@@ -72,7 +104,7 @@ async function initializeApp() {
           features: parcelFeatures,
         };
 
-        state.mapController.addParcelLayers(state.parcelGeoJson);
+        state.mapController.addParcelLayers(state.parcelGeoJson, activeScheme);
         state.mapController.bindParcelInteractions({
           onHover: handleParcelHover,
           onLeave: handleMouseLeave,
@@ -122,22 +154,25 @@ async function loadImpactRows(dataUrl) {
   return rows;
 }
 
-function handleCategoryChange(category, isChecked) {
-  if (isChecked) state.selectedCategories.add(category);
-  else state.selectedCategories.delete(category);
+function handleValueChange(valueId, isChecked) {
+  const selections = getActiveSelections();
+  if (isChecked) selections.add(valueId);
+  else selections.delete(valueId);
   applyFilters();
 }
 
 function handleSelectAll() {
-  state.selectedCategories.clear();
-  CONFIG.categoryOrder.forEach((category) => state.selectedCategories.add(category));
-  state.syncCheckboxUi();
+  const activeScheme = getActiveScheme();
+  const selections = getActiveSelections();
+  selections.clear();
+  activeScheme.values.forEach((entry) => selections.add(entry.id));
+  state.filterUi.syncCheckboxUi(selections);
   applyFilters();
 }
 
 function handleClearAll() {
-  state.selectedCategories.clear();
-  state.syncCheckboxUi();
+  getActiveSelections().clear();
+  state.filterUi.syncCheckboxUi(getActiveSelections());
   applyFilters();
 }
 
@@ -151,16 +186,72 @@ function handleBasemapChange(basemapId) {
   state.basemapSwitcher.syncActiveBasemap(state.mapController.getActiveBasemap());
 }
 
+function handleSchemeChange(nextSchemeId) {
+  if (!state.filterSelectionsBySchemeId.has(nextSchemeId)) return;
+  state.activeSchemeId = nextSchemeId;
+  const activeScheme = getActiveScheme();
+
+  renderSchemeHeader({ dom, scheme: activeScheme });
+
+  state.filterUi.rerenderFilterList(
+    activeScheme,
+    state.dataModel.countsBySchemeId.get(activeScheme.id) || {},
+    getActiveSelections(),
+    handleValueChange,
+  );
+
+  if (state.mapController) state.mapController.setActiveColorScheme(activeScheme);
+
+  applyFilters();
+  refreshDetailPanelForActiveScheme();
+}
+
+function refreshDetailPanelForActiveScheme() {
+  const activeScheme = getActiveScheme();
+
+  if (state.selectedLookupKey) {
+    const selectedFeature = getFeatureByLookupKey(state.selectedLookupKey);
+    if (selectedFeature) {
+      renderParcelDetails({
+        parcelDetailsEl: dom.parcelDetailsEl,
+        feature: selectedFeature,
+        matchingRows: getMatchingRowsForFeature(selectedFeature, state.dataModel.rowLookupByParcelKey),
+        modeLabel: "Selected",
+        activeScheme,
+      });
+      return;
+    }
+  }
+
+  if (state.hoveredLookupKey) {
+    const hoveredFeature = getFeatureByLookupKey(state.hoveredLookupKey);
+    if (hoveredFeature && hoveredFeature.properties.isVisible === 1) {
+      renderParcelDetails({
+        parcelDetailsEl: dom.parcelDetailsEl,
+        feature: hoveredFeature,
+        matchingRows: getMatchingRowsForFeature(hoveredFeature, state.dataModel.rowLookupByParcelKey),
+        modeLabel: "Hovering",
+        activeScheme,
+      });
+      return;
+    }
+  }
+
+  renderDetailPlaceholder(dom.parcelDetailsEl, CONFIG.detailPlaceholderText);
+}
+
 function applyFilters() {
+  const activeScheme = getActiveScheme();
+
   state.parcelGeoJson.features.forEach((feature) => {
     const matchingRows = getMatchingRowsForFeature(
       feature,
       state.dataModel?.rowLookupByParcelKey || new Map(),
     );
-    const visibleRows = matchingRows.filter((row) => state.selectedCategories.has(row.impactCategory));
-    feature.properties.displayImpact = visibleRows.length
-      ? getHighestCategory(visibleRows, CONFIG.categoryOrder)
-      : getHighestCategory(matchingRows, CONFIG.categoryOrder);
+    const visibleRows = matchingRows.filter(isRowVisible);
+    feature.properties.displayValue = visibleRows.length
+      ? getRollupValue(visibleRows, activeScheme)
+      : getRollupValue(matchingRows, activeScheme);
     feature.properties.isVisible = visibleRows.length ? 1 : 0;
   });
 
@@ -191,6 +282,14 @@ function applyFilters() {
   }
 }
 
+function isRowVisible(row) {
+  return CONFIG.schemes.every((scheme) => {
+    const value = row[scheme.field] || scheme.fallbackValueId;
+    const selections = state.filterSelectionsBySchemeId.get(scheme.id);
+    return selections ? selections.has(value) : true;
+  });
+}
+
 function handleParcelHover(event) {
   const feature = event.features?.find((candidate) => candidate.properties?.isVisible === 1);
   if (!feature) {
@@ -209,8 +308,7 @@ function handleParcelHover(event) {
       feature,
       matchingRows,
       modeLabel: "Hovering",
-      categoryColors: CONFIG.categoryColors,
-      categoryOrder: CONFIG.categoryOrder,
+      activeScheme: getActiveScheme(),
     });
   }
 
@@ -250,8 +348,7 @@ function handleMapClick(event) {
       feature: clickedFeature,
       matchingRows: getMatchingRowsForFeature(clickedFeature, state.dataModel.rowLookupByParcelKey),
       modeLabel: "Selected",
-      categoryColors: CONFIG.categoryColors,
-      categoryOrder: CONFIG.categoryOrder,
+      activeScheme: getActiveScheme(),
     });
     return;
   }
@@ -271,8 +368,7 @@ function clearSelection() {
         feature: hoveredFeature,
         matchingRows: getMatchingRowsForFeature(hoveredFeature, state.dataModel.rowLookupByParcelKey),
         modeLabel: "Hovering",
-        categoryColors: CONFIG.categoryColors,
-        categoryOrder: CONFIG.categoryOrder,
+        activeScheme: getActiveScheme(),
       });
       return;
     }
