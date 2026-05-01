@@ -66,7 +66,7 @@ function esriGeometryToGeoJSON(geometry) {
   return null;
 }
 
-export async function fetchAllParcelFeatures({ config, rowLookupByParcelKey }) {
+export async function fetchAllParcelFeatures({ config, rowLookupByParcelKey, defaultScheme }) {
   const uniqueLookupKeys = Array.from(rowLookupByParcelKey.keys());
   const chunks = chunkArray(uniqueLookupKeys, config.parcelQueryChunkSize);
   const collectedFeatures = [];
@@ -97,7 +97,7 @@ export async function fetchAllParcelFeatures({ config, rowLookupByParcelKey }) {
         countyName: feature.properties?.county || feature.properties?.County || "",
         serviceAddress:
           feature.properties?.situs_address || feature.properties?.site_address || "",
-        displayImpact: "Other",
+        displayValue: defaultScheme.fallbackValueId,
         isVisible: 1,
       };
       collectedFeatures.push(feature);

@@ -8,11 +8,6 @@
   --muted: #5f7285;
   --border: #d7e1ea;
   --shadow: 0 12px 28px rgba(11, 58, 99, 0.1);
-  --impact-extra-high: #c62828;
-  --impact-high: #8e24aa;
-  --impact-medium: #fdd835;
-  --impact-low: #1976d2;
-  --impact-other: #78909c;
 }
 
 * {
@@ -85,6 +80,28 @@ body {
   color: var(--cdot-blue-dark);
 }
 
+.scheme-switcher {
+  margin-bottom: 12px;
+}
+
+.scheme-select {
+  width: 100%;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--cdot-blue-dark);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scheme-select:hover {
+  border-color: var(--cdot-orange);
+}
+
 .helper-text {
   color: var(--muted);
   font-size: 12px;
@@ -154,31 +171,11 @@ button:hover {
   cursor: pointer;
 }
 
-.impact-dot {
+.scheme-dot {
   width: 12px;
   height: 12px;
   border-radius: 999px;
   flex: 0 0 12px;
-}
-
-.impact-extra-high {
-  background: var(--impact-extra-high);
-}
-
-.impact-high {
-  background: var(--impact-high);
-}
-
-.impact-medium {
-  background: var(--impact-medium);
-}
-
-.impact-low {
-  background: var(--impact-low);
-}
-
-.impact-other {
-  background: var(--impact-other);
 }
 
 .count-pill {
@@ -243,26 +240,6 @@ button:hover {
   border-radius: 12px;
   padding: 12px;
   background: #fbfdff;
-}
-
-.record-card.extra-high {
-  border-left-color: var(--impact-extra-high);
-}
-
-.record-card.high {
-  border-left-color: var(--impact-high);
-}
-
-.record-card.medium {
-  border-left-color: var(--impact-medium);
-}
-
-.record-card.low {
-  border-left-color: var(--impact-low);
-}
-
-.record-card.other {
-  border-left-color: var(--impact-other);
 }
 
 .record-top {

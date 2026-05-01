@@ -17,14 +17,15 @@
     </div>
     <div class="sidebar-scroll">
       <section class="panel">
-        <h2>Easement Impact</h2>
+        <h2 id="active-scheme-label">Display</h2>
+        <div class="scheme-switcher" id="scheme-switcher"></div>
         <div class="filter-actions">
           <button id="select-all-btn" class="primary-btn" type="button">Select all</button>
           <button id="clear-all-btn" type="button">Clear all</button>
           <button id="reset-view-btn" type="button">Reset map view</button>
         </div>
         <div class="checkbox-list" id="filter-list"></div>
-        <p class="helper-text">Parcels with multiple spreadsheet rows stay visible if at least one matching row is checked.</p>
+        <p class="helper-text" id="scheme-helper-text"></p>
       </section>
       <section class="panel">
         <h2>Parcel details</h2>
