@@ -122,11 +122,15 @@ After those three adjustments, adding survey status or outreach status is a conf
 ### Open questions for Part 1
 
 - Do all schemes share the same parcel-rollup rule (highest-priority value wins)? Easement Impact and Outreach both want "highest." Survey status is binary and the rollup question is different (any unsurveyed row makes the parcel "unsurveyed"? or any surveyed row is enough?). ROW plans depend on whether the pipeline is ordinal.
+   Developer response: probably yes, make note of implications when presenting plan
 - Do binary fields need an explicit "unknown / not set" state, and what color does it get? Probably yes, and probably a neutral gray.
+   Developer response: Recommend transparent with a grey border for unknon / not set.
 - Should the legend ever be visible on the map itself, or stay in the sidebar?
+   Developer response: sidebar for now
 - When a user switches the active scheme, does the filter selection reset, or is it remembered per scheme?
+   Developer response: unsure. Use best judgement, make note of implications when presenting plan
 - Do we want the parcel detail card to show all dimensions for a parcel regardless of which scheme is active? (Probably yes - the detail panel is the place to see everything.)
-
+   Developer response: yes. Hover-over pop-up may be modified to show other relevant details (ie, potentially a "Notes or other open-ended field updated by the project team
 ---
 
 ## Part 2: Data Management
