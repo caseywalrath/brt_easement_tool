@@ -6,13 +6,14 @@ const CLEANUP_TEXT_PATTERNS = [
   "not along federal blvd",
 ];
 
-export function normalizeImpactCategory(value) {
+export function getSchemeById(schemes, schemeId) {
+  return schemes.find((scheme) => scheme.id === schemeId) || schemes[0] || null;
+}
+
+export function normalizeSchemeValue(scheme, value) {
   const clean = String(value || "").trim();
-  if (clean === "Extra High") return "Extra High";
-  if (clean === "High") return "High";
-  if (clean === "Medium") return "Medium";
-  if (clean === "Low") return "Low";
-  return "Other";
+  const match = scheme.values.find((entry) => entry.id === clean);
+  return match ? match.id : scheme.fallbackValueId;
 }
 
 export function normalizeParcelId(value) {
@@ -35,15 +36,16 @@ export function buildParcelLookupKeys(rawParcelValue) {
   return Array.from(keys);
 }
 
-export function categoryClassName(category) {
-  return String(category || "Other")
+export function valueClassName(valueId) {
+  return String(valueId || "")
     .toLowerCase()
     .replace(/\s+/g, "-");
 }
 
-export function countRowsByCategory(rows) {
+export function countRowsBySchemeValue(rows, scheme) {
   return rows.reduce((accumulator, row) => {
-    accumulator[row.impactCategory] = (accumulator[row.impactCategory] || 0) + 1;
+    const value = row[scheme.field] || scheme.fallbackValueId;
+    accumulator[value] = (accumulator[value] || 0) + 1;
     return accumulator;
   }, {});
 }
@@ -56,12 +58,27 @@ export function chunkArray(array, size) {
   return chunks;
 }
 
-export function getHighestCategory(rows, categoryOrder) {
-  const categories = rows.map((row) => row.impactCategory);
-  for (const category of categoryOrder) {
-    if (categories.includes(category)) return category;
+export function getRollupValue(rows, scheme) {
+  if (!rows.length) return scheme.fallbackValueId;
+
+  if (scheme.rollup === "highest-priority") {
+    const valuesPresent = new Set(
+      rows.map((row) => row[scheme.field] || scheme.fallbackValueId),
+    );
+    for (const entry of scheme.values) {
+      if (valuesPresent.has(entry.id)) return entry.id;
+    }
+    return scheme.fallbackValueId;
   }
-  return "Other";
+
+  return scheme.fallbackValueId;
+}
+
+export function getValueColor(scheme, valueId) {
+  const match = scheme.values.find((entry) => entry.id === valueId);
+  if (match) return match.color;
+  const fallback = scheme.values.find((entry) => entry.id === scheme.fallbackValueId);
+  return fallback ? fallback.color : "#999999";
 }
 
 export function hasMeaningfulText(value, additionalPlaceholders = []) {
@@ -105,7 +122,7 @@ export function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-export function prepareImpactData(rawRows) {
+export function prepareImpactData(rawRows, schemes) {
   const cleanedRows = [];
   const excludedCleanupRows = [];
 
@@ -113,6 +130,9 @@ export function prepareImpactData(rawRows) {
     const parcelNumber = String(row.parcelNumber || "").trim();
     const notes = String(row.notes || "").trim().toLowerCase();
     const business = String(row.businessName || "").trim().toLowerCase();
+    // Placeholder check intentionally tied to Easement Impact: it's about
+    // identifying empty rows in the source spreadsheet, not a general scheme
+    // concern. When a binary scheme is added it should not be folded in here.
     const placeholderRow =
       !hasMeaningfulText(row.impactCategory) &&
       !hasMeaningfulText(row.businessName) &&
@@ -122,12 +142,15 @@ export function prepareImpactData(rawRows) {
       (pattern) => notes.includes(pattern) || business.includes(pattern),
     );
     const exclude = parcelNumber.includes("X") || placeholderRow || cleanupRow;
+
     const normalizedRow = {
       ...row,
       uid: `row-${index + 1}`,
       parcelKeys: buildParcelLookupKeys(parcelNumber),
-      impactCategory: normalizeImpactCategory(row.impactCategory),
     };
+    schemes.forEach((scheme) => {
+      normalizedRow[scheme.field] = normalizeSchemeValue(scheme, row[scheme.field]);
+    });
 
     if (exclude) excludedCleanupRows.push(normalizedRow);
     else cleanedRows.push(normalizedRow);
@@ -141,11 +164,16 @@ export function prepareImpactData(rawRows) {
     });
   });
 
+  const countsBySchemeId = new Map();
+  schemes.forEach((scheme) => {
+    countsBySchemeId.set(scheme.id, countRowsBySchemeValue(cleanedRows, scheme));
+  });
+
   return {
     cleanedRows,
     excludedCleanupRows,
     rowLookupByParcelKey,
-    categoryCounts: countRowsByCategory(cleanedRows),
+    countsBySchemeId,
   };
 }
 

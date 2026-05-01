@@ -17,7 +17,16 @@ export function createMapController(config) {
 
   let parcelInteractionsBound = false;
 
-  function addParcelLayers(parcelGeoJson) {
+  function buildFillColorExpression(scheme) {
+    const matchExpression = ["match", ["get", "displayValue"]];
+    scheme.values.forEach((entry) => {
+      matchExpression.push(entry.id, entry.color);
+    });
+    matchExpression.push("#999999");
+    return matchExpression;
+  }
+
+  function addParcelLayers(parcelGeoJson, scheme) {
     if (map.getSource("row-parcels")) return;
 
     map.addSource("row-parcels", { type: "geojson", data: parcelGeoJson });
@@ -26,21 +35,7 @@ export function createMapController(config) {
       type: "fill",
       source: "row-parcels",
       paint: {
-        "fill-color": [
-          "match",
-          ["get", "displayImpact"],
-          "Extra High",
-          config.categoryColors["Extra High"],
-          "High",
-          config.categoryColors.High,
-          "Medium",
-          config.categoryColors.Medium,
-          "Low",
-          config.categoryColors.Low,
-          "Other",
-          config.categoryColors.Other,
-          "#999999",
-        ],
+        "fill-color": buildFillColorExpression(scheme),
         "fill-opacity": ["case", ["==", ["get", "isVisible"], 1], 0.45, 0],
       },
     });
@@ -73,6 +68,11 @@ export function createMapController(config) {
       source: "row-parcels",
       paint: { "fill-color": "#000000", "fill-opacity": 0 },
     });
+  }
+
+  function setActiveColorScheme(scheme) {
+    if (!map.getLayer("row-parcels-fill")) return;
+    map.setPaintProperty("row-parcels-fill", "fill-color", buildFillColorExpression(scheme));
   }
 
   function bindParcelInteractions({ onHover, onLeave, onMapClick }) {
@@ -156,6 +156,7 @@ export function createMapController(config) {
       map.addControl(control, position);
     },
     addParcelLayers,
+    setActiveColorScheme,
     bindParcelInteractions,
     setParcelData,
     updateHoverOutline,

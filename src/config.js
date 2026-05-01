@@ -34,14 +34,25 @@ export const CONFIG = {
       isDefault: false,
     },
   ],
-  categoryOrder: ["Extra High", "High", "Medium", "Low", "Other"],
-  categoryColors: {
-    "Extra High": "#c62828",
-    High: "#8e24aa",
-    Medium: "#fdd835",
-    Low: "#1976d2",
-    Other: "#78909c",
-  },
+  schemes: [
+    {
+      id: "easement-impact",
+      label: "Easement Impact",
+      field: "impactCategory",
+      values: [
+        { id: "Extra High", color: "#c62828" },
+        { id: "High", color: "#8e24aa" },
+        { id: "Medium", color: "#fdd835" },
+        { id: "Low", color: "#1976d2" },
+        { id: "Other", color: "#78909c" },
+      ],
+      rollup: "highest-priority",
+      fallbackValueId: "Other",
+      helperText:
+        "Parcels with multiple spreadsheet rows stay visible if at least one matching row is checked.",
+    },
+  ],
+  defaultSchemeId: "easement-impact",
   detailPlaceholderText:
     "Hover over a parcel to preview its details. Click a parcel to keep the details visible until you click elsewhere on the map.",
 };
