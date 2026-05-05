@@ -310,8 +310,64 @@ A few items affect both dimensions and are worth flagging now:
 - **Schema versioning**: once data fields multiply across teams, the runtime data contract in the README will need a version field and a migration plan. A breaking change to the JSON shape currently means hand-fixing the dataset.
 - **Mapbox token**: still committed in `src/config.js`. A wider audience means a higher risk of token leakage. Worth rotating to a URL-restricted token before any wider distribution.
 - **Tests**: the app has none. Before either dimension lands, a smoke test that boots the app against a fixture JSON and verifies the filter list renders is worth its weight.
-- **Hosting**: currently served locally over `python -m http.server`. If team members are going to use the app, it needs a stable hosting target. GitHub Pages from this repo is the obvious zero-cost path.
+- **Hosting and access control**: see the dedicated subsection below. As of 2026-05-05, leaning toward GitHub Pages fronted by Cloudflare DNS with a Worker-based password gate.
 - **Naming**: "Easement Impact" is currently the only "thing" the sidebar shows. As soon as a second scheme appears, the page title and headings ("Federal BRT Easement Impacts") may feel narrower than the actual app. Worth considering a slightly broader name.
+
+### Hosting and access control
+
+**Direction (2026-05-05)**: lean toward **GitHub Pages + Cloudflare DNS + a Cloudflare Worker doing Basic Auth**. This preserves the `git push` → live deploy loop the developer already uses, adds a real edge gate before any content reaches the browser, and stays free. Sized as a half-day setup.
+
+#### Why a gate matters now
+
+The app is currently reachable only over `python -m http.server` on a local laptop. As soon as it has a stable URL, two things follow:
+
+1. The URL is essentially public the moment any team member shares it. There's no built-in way to restrict to a specific group of viewers.
+2. The data file (`data/row-impacts.json`) is committed to the repo and served alongside the app. Anyone who reaches the site can read it. Anyone who reaches the GitHub repo can read it directly.
+
+A site-level password is a "keep casual visitors out" layer. It is not, by itself, a data-protection layer — see the caveat below.
+
+#### Options considered
+
+**Option 1: Cloudflare Access (per-user, email PIN).** Free up to 50 users on Cloudflare's Zero Trust tier. Real per-user authentication, revocation, and an audit log of who signed in. Setup ~1 hour. Requires the site to be reachable through Cloudflare DNS.
+
+**Option 2: Cloudflare Worker with Basic Auth (one shared password).** Worker intercepts every request, checks `Authorization: Basic ...`, returns 401 with `WWW-Authenticate: Basic` if missing. Single shared secret, no per-user revocation, no audit of who signed in. Browser caches credentials for the session; no clean logout. Free up to 100k requests/day. Setup ~half-day.
+
+**Option 3: Client-side JS gate.** Hide the UI until a user types a password whose hash is in `app.js`. 30 minutes to add, cosmetic only — devtools defeats it instantly, and the data file is reachable directly without going through the gate. Useful only if the data is genuinely non-sensitive and the gate is just a "are you sure you should be here" speedbump.
+
+#### The leaning direction: Option 2, on GitHub Pages, fronted by Cloudflare
+
+Setup at a roadmap level (a more detailed step-by-step is implementation-ticket scope):
+
+1. Get a domain into Cloudflare. Workers attach to routes on Cloudflare-managed domains, so `username.github.io` cannot be used directly — a custom domain or subdomain is required. Cloudflare Registrar sells `.com` at cost (~$10/yr) if there isn't already one.
+2. Point GitHub Pages at the custom domain with a DNS-only (gray cloud) CNAME and wait for the GitHub-issued Let's Encrypt cert.
+3. Flip the CNAME to proxied (orange cloud); set Cloudflare SSL/TLS mode to Full.
+4. Deploy a Worker with the Basic Auth code; store the password as a Worker secret; bind a route `<custom-domain>/*` → Worker.
+
+The single most common failure mode is enabling Cloudflare's proxy before GitHub has issued its cert, which prevents the HTTP-01 challenge from completing. The order matters: DNS-only first, wait for the cert, then proxy. If proxy is on and the cert is stuck, switch back to DNS-only, wait, re-proxy.
+
+Why Option 2 over Option 1: simpler operationally for a small group, and a single shared password matches how the team currently shares spreadsheets. Why Option 2 over Option 3: it is a real edge gate rather than a cosmetic one. If the team grows past ~10-15 people, or if "one leaked password rotates everyone" becomes painful, switching to Option 1 is roughly a one-hour change against the same Cloudflare/DNS setup — most of the half-day cost is reusable.
+
+#### Caveats that don't go away with a site-level gate
+
+The Worker (or an Access policy) gates `https://brt.example.com/*`. It does *not* gate:
+
+- `https://<username>.github.io/<repo>/*` — GitHub Pages keeps serving on its own URL.
+- `https://github.com/<username>/<repo>/blob/main/data/row-impacts.json` — direct file view.
+
+If the data needs real protection from a determined viewer, the repo has to be private. **GitHub Pages from a private repo requires a paid GitHub plan** (Pro is ~$4/mo — verify current pricing). On a free plan with a public repo, the gate keeps casual visitors out of the app but does nothing for the data.
+
+This connects back to Part 2. Two pairings make sense:
+
+- **Default path + private repo + site gate**: data file stays in git but in a private repo; site gate is the password layer for the rendered app. Costs ~$4/mo for GitHub Pro plus the domain.
+- **Option F (Sheets → cron → JSON) + site gate**: source sheet stays private under Google's ACL; the sync job runs as an authenticated identity; the served JSON exposure is only on the gated path.
+
+Either way, a site-level gate is necessary for app access; the question of how the data is sourced determines whether the gate is also sufficient.
+
+#### Tradeoffs to flag
+
+- **Shared password vs. per-user.** Option 2 is simpler; Option 1 is cleaner if individual revocation matters. For ~5 people, Option 2 is fine; at 20+ people, Option 1 is materially better.
+- **Half-day vs. one-hour setup.** Most of Option 2's time is in the GitHub Pages + custom domain dance, not the Worker itself. Option 1 has the same DNS dance and skips the Worker code; net difference is ~1-2 hours.
+- **Browser UX of Basic Auth.** Native prompt, no logout button (close the browser), no styling. If polish matters for stakeholder demos, Option 1's Cloudflare Access flow is better-looking.
 
 ---
 
