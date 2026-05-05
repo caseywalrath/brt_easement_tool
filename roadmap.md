@@ -17,12 +17,14 @@ Neither problem requires a decision today. The goal is to surface tradeoffs, ide
 
 The app exposes a single classification axis: Easement Impact (Extra High, High, Medium, Low, Other).
 
-This is wired through three layers:
-- **Data**: `impactCategory` field on each row in `data/row-impacts.json`
-- **Configuration**: `categoryOrder` and `categoryColors` in `src/config.js`
-- **Render path**: `src/data-model.js` normalizes the field; `src/map.js` paints the map fill from a hard-coded `match` expression on `displayImpact`; `src/ui.js` builds the filter checklist; `styles.css` defines `--impact-*` CSS variables and `.impact-*` / `.record-card.*` classes that hard-code colors per category
+**Update (2026-05-05)**: the prep refactor described later in this section has landed. Easement Impact is now registered as the only entry in a `CONFIG.schemes` array and the rest of the runtime reads from that registry. The visible app is unchanged. Adding the next dimension is now a config edit rather than a coordinated change across six files. See `architecture_overview.md` "2026-05-05 Display Schemes Refactor Pass" for the file-by-file delta.
 
-The existing pattern is good: priority order and colors are config-driven, and most of the runtime accepts any string value. The tightly coupled bits are the literal `match` expression in the Mapbox paint and the per-category CSS class names.
+The dimension is wired through three layers:
+- **Data**: `impactCategory` field on each row in `data/row-impacts.json`
+- **Configuration**: a `schemes` array in `src/config.js` (Easement Impact is the only entry today), plus `defaultSchemeId`
+- **Render path**: `src/data-model.js` normalizes any scheme's source field; `src/map.js` builds the Mapbox `match` expression from the active scheme; `src/ui.js` builds the filter checklist and applies inline colors from the scheme; `styles.css` retains only structural classes
+
+The render path is now scheme-agnostic. The remaining tight coupling is the placeholder-row exclusion in `prepareImpactData`, which intentionally stays tied to `impactCategory` because it is a spreadsheet-cleanup concern rather than a general scheme concern.
 
 ### What's coming
 
@@ -109,15 +111,17 @@ Color drives one scheme; an icon, border style, or hatch pattern drives another.
 
 ### What this means for the current codebase
 
-The CSS and JS architecture needs three small adjustments before any second dimension is added:
+The CSS and JS architecture needs three small adjustments before any second dimension is added. **All three landed in the 2026-05-05 refactor pass.**
 
-1. **Replace hard-coded category classes with data-driven inline color application.** `.impact-extra-high`, `.impact-high`, etc. should not encode colors in `styles.css`. The colors should come from the active scheme and be applied via inline `style="..."`. Class names can stay as structural hooks for layout.
+1. ~~**Replace hard-coded category classes with data-driven inline color application.**~~ Done. `.impact-*` color classes were removed from `styles.css`. Colors now come from `scheme.values` and are applied via inline `style="..."`. Structural classes (`.scheme-dot`, `.record-card`) remain.
 
-2. **Replace the hard-coded match expression in `src/map.js`.** The fill paint should be built from the active scheme's values list, not literal `"Extra High", "#c62828", ...` rows.
+2. ~~**Replace the hard-coded match expression in `src/map.js`.**~~ Done. `buildFillColorExpression(scheme)` constructs the Mapbox `match` expression from the active scheme's values list. `setActiveColorScheme` rebuilds it on switch.
 
-3. **Move the existing Easement Impact configuration into the new scheme structure**, even before adding a second scheme. This is a no-op rename that proves the registry works and gives a single, clean diff to review.
+3. ~~**Move the existing Easement Impact configuration into the new scheme structure.**~~ Done. `CONFIG.schemes` holds it as the only entry; `CONFIG.defaultSchemeId` selects it.
 
-After those three adjustments, adding survey status or outreach status is a config-only change plus a minimal UI affordance to choose between schemes.
+A single-option scheme switcher was also added (proves the registry works end-to-end). Filter state is now stored per scheme, so the eventual color-by + filter-by UX (Option B) does not need another state restructure.
+
+Adding survey status, ROW plans, or outreach is now a config-only change plus a minimal UI affordance if and when the active-dimension model changes from "single dropdown" to Option B's "color-by + filter-by."
 
 ### Open questions for Part 1
 
@@ -129,6 +133,7 @@ After those three adjustments, adding survey status or outreach status is a conf
    Developer response: sidebar for now
 - When a user switches the active scheme, does the filter selection reset, or is it remembered per scheme?
    Developer response: unsure. Use best judgement, make note of implications when presenting plan
+   Implementation note (2026-05-05): per-scheme memory shipped. Each scheme keeps its own selection set; switching dimensions and back restores the previous filter state. This matches what Option B will need natively. Implication: if a user filters Easement Impact down to "Extra High" only, switches to Survey Status, filters that, then switches back, the "Extra High only" state is still there. Tradeoff vs. global reset is that filter state can drift out of view; "Select all" / "Clear all" still work per the active scheme.
 - Do we want the parcel detail card to show all dimensions for a parcel regardless of which scheme is active? (Probably yes - the detail panel is the place to see everything.)
    Developer response: yes. Hover-over pop-up may be modified to show other relevant details (ie, potentially a "Notes or other open-ended field updated by the project team
 ---
@@ -305,8 +310,64 @@ A few items affect both dimensions and are worth flagging now:
 - **Schema versioning**: once data fields multiply across teams, the runtime data contract in the README will need a version field and a migration plan. A breaking change to the JSON shape currently means hand-fixing the dataset.
 - **Mapbox token**: still committed in `src/config.js`. A wider audience means a higher risk of token leakage. Worth rotating to a URL-restricted token before any wider distribution.
 - **Tests**: the app has none. Before either dimension lands, a smoke test that boots the app against a fixture JSON and verifies the filter list renders is worth its weight.
-- **Hosting**: currently served locally over `python -m http.server`. If team members are going to use the app, it needs a stable hosting target. GitHub Pages from this repo is the obvious zero-cost path.
+- **Hosting and access control**: see the dedicated subsection below. As of 2026-05-05, leaning toward GitHub Pages fronted by Cloudflare DNS with a Worker-based password gate.
 - **Naming**: "Easement Impact" is currently the only "thing" the sidebar shows. As soon as a second scheme appears, the page title and headings ("Federal BRT Easement Impacts") may feel narrower than the actual app. Worth considering a slightly broader name.
+
+### Hosting and access control
+
+**Direction (2026-05-05)**: lean toward **GitHub Pages + Cloudflare DNS + a Cloudflare Worker doing Basic Auth**. This preserves the `git push` → live deploy loop the developer already uses, adds a real edge gate before any content reaches the browser, and stays free. Sized as a half-day setup.
+
+#### Why a gate matters now
+
+The app is currently reachable only over `python -m http.server` on a local laptop. As soon as it has a stable URL, two things follow:
+
+1. The URL is essentially public the moment any team member shares it. There's no built-in way to restrict to a specific group of viewers.
+2. The data file (`data/row-impacts.json`) is committed to the repo and served alongside the app. Anyone who reaches the site can read it. Anyone who reaches the GitHub repo can read it directly.
+
+A site-level password is a "keep casual visitors out" layer. It is not, by itself, a data-protection layer — see the caveat below.
+
+#### Options considered
+
+**Option 1: Cloudflare Access (per-user, email PIN).** Free up to 50 users on Cloudflare's Zero Trust tier. Real per-user authentication, revocation, and an audit log of who signed in. Setup ~1 hour. Requires the site to be reachable through Cloudflare DNS.
+
+**Option 2: Cloudflare Worker with Basic Auth (one shared password).** Worker intercepts every request, checks `Authorization: Basic ...`, returns 401 with `WWW-Authenticate: Basic` if missing. Single shared secret, no per-user revocation, no audit of who signed in. Browser caches credentials for the session; no clean logout. Free up to 100k requests/day. Setup ~half-day.
+
+**Option 3: Client-side JS gate.** Hide the UI until a user types a password whose hash is in `app.js`. 30 minutes to add, cosmetic only — devtools defeats it instantly, and the data file is reachable directly without going through the gate. Useful only if the data is genuinely non-sensitive and the gate is just a "are you sure you should be here" speedbump.
+
+#### The leaning direction: Option 2, on GitHub Pages, fronted by Cloudflare
+
+Setup at a roadmap level (a more detailed step-by-step is implementation-ticket scope):
+
+1. Get a domain into Cloudflare. Workers attach to routes on Cloudflare-managed domains, so `username.github.io` cannot be used directly — a custom domain or subdomain is required. Cloudflare Registrar sells `.com` at cost (~$10/yr) if there isn't already one.
+2. Point GitHub Pages at the custom domain with a DNS-only (gray cloud) CNAME and wait for the GitHub-issued Let's Encrypt cert.
+3. Flip the CNAME to proxied (orange cloud); set Cloudflare SSL/TLS mode to Full.
+4. Deploy a Worker with the Basic Auth code; store the password as a Worker secret; bind a route `<custom-domain>/*` → Worker.
+
+The single most common failure mode is enabling Cloudflare's proxy before GitHub has issued its cert, which prevents the HTTP-01 challenge from completing. The order matters: DNS-only first, wait for the cert, then proxy. If proxy is on and the cert is stuck, switch back to DNS-only, wait, re-proxy.
+
+Why Option 2 over Option 1: simpler operationally for a small group, and a single shared password matches how the team currently shares spreadsheets. Why Option 2 over Option 3: it is a real edge gate rather than a cosmetic one. If the team grows past ~10-15 people, or if "one leaked password rotates everyone" becomes painful, switching to Option 1 is roughly a one-hour change against the same Cloudflare/DNS setup — most of the half-day cost is reusable.
+
+#### Caveats that don't go away with a site-level gate
+
+The Worker (or an Access policy) gates `https://brt.example.com/*`. It does *not* gate:
+
+- `https://<username>.github.io/<repo>/*` — GitHub Pages keeps serving on its own URL.
+- `https://github.com/<username>/<repo>/blob/main/data/row-impacts.json` — direct file view.
+
+If the data needs real protection from a determined viewer, the repo has to be private. **GitHub Pages from a private repo requires a paid GitHub plan** (Pro is ~$4/mo — verify current pricing). On a free plan with a public repo, the gate keeps casual visitors out of the app but does nothing for the data.
+
+This connects back to Part 2. Two pairings make sense:
+
+- **Default path + private repo + site gate**: data file stays in git but in a private repo; site gate is the password layer for the rendered app. Costs ~$4/mo for GitHub Pro plus the domain.
+- **Option F (Sheets → cron → JSON) + site gate**: source sheet stays private under Google's ACL; the sync job runs as an authenticated identity; the served JSON exposure is only on the gated path.
+
+Either way, a site-level gate is necessary for app access; the question of how the data is sourced determines whether the gate is also sufficient.
+
+#### Tradeoffs to flag
+
+- **Shared password vs. per-user.** Option 2 is simpler; Option 1 is cleaner if individual revocation matters. For ~5 people, Option 2 is fine; at 20+ people, Option 1 is materially better.
+- **Half-day vs. one-hour setup.** Most of Option 2's time is in the GitHub Pages + custom domain dance, not the Worker itself. Option 1 has the same DNS dance and skips the Worker code; net difference is ~1-2 hours.
+- **Browser UX of Basic Auth.** Native prompt, no logout button (close the browser), no styling. If polish matters for stakeholder demos, Option 1's Cloudflare Access flow is better-looking.
 
 ---
 

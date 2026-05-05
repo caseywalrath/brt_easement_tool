@@ -99,3 +99,20 @@ This pass added config-driven basemap support and a lower-right basemap switcher
 - `src/map.js` initializes all configured basemap layers and switches them without resetting parcel state
 - `src/ui.js` owns the compact icon-triggered basemap menu
 - the app currently supports Mapbox satellite and OpenStreetMap streets
+
+## 2026-05-05 Display Schemes Refactor Pass
+
+This pass generalizes the single hard-coded "Easement Impact" dimension into a configurable registry of display schemes. The visible app is unchanged - only Easement Impact is registered, and the new scheme switcher above the filter list renders as a single-option select. The point is that adding survey, ROW plans, or outreach later is a config-only edit instead of a coordinated change across six files.
+
+- `src/config.js`: replaced `categoryOrder` and `categoryColors` with a `schemes` array (each entry declares `id`, `label`, `field`, `values`, `rollup`, `fallbackValueId`, `helperText`) and a `defaultSchemeId`
+- `src/data-model.js`: replaced impact-specific helpers with scheme-aware versions - `getSchemeById`, `normalizeSchemeValue`, `getRollupValue`, `countRowsBySchemeValue`, `valueClassName`, `getValueColor`. The placeholder-row check in `prepareImpactData` stays tied to `impactCategory` by design - it is a spreadsheet-cleanup concern, not a general scheme concern.
+- `src/app.js`: state now holds `activeSchemeId` and `filterSelectionsBySchemeId` (a `Map<schemeId, Set<valueId>>`); `applyFilters` AND-combines selections across all schemes, so adding a second scheme automatically composes
+- `src/map.js`: the parcel-fill `match` expression is built dynamically from the active scheme's values; `setActiveColorScheme` rebuilds the paint property when the user switches schemes
+- `src/parcel-service.js`: initial `displayValue` for fetched parcels comes from `defaultScheme.fallbackValueId` instead of the literal `"Other"`
+- `src/ui.js`: scheme switcher `<select>` at the top of the panel; filter list and detail card render colors inline from `scheme.values` instead of CSS classes
+- `styles.css`: removed `--impact-*` variables and `.impact-*` / `.record-card.<category>` color-binding classes; `.impact-dot` is now `.scheme-dot`
+- `index.html`: the panel `<h2>` is now a runtime-populated `id="active-scheme-label"`, and a scheme-switcher container plus runtime helper-text element were added
+
+Filter selection is preserved per scheme: switching dimensions and back restores the previous filter state. This matches what the eventual "color-by + filter-by" UX (Option B in the roadmap) will need natively.
+
+Forward compatibility verified by adding a fake second scheme against an existing row field and confirming the dropdown switches dimensions, recolors the map, and preserves per-scheme filter state.
