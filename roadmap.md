@@ -17,12 +17,14 @@ Neither problem requires a decision today. The goal is to surface tradeoffs, ide
 
 The app exposes a single classification axis: Easement Impact (Extra High, High, Medium, Low, Other).
 
-This is wired through three layers:
-- **Data**: `impactCategory` field on each row in `data/row-impacts.json`
-- **Configuration**: `categoryOrder` and `categoryColors` in `src/config.js`
-- **Render path**: `src/data-model.js` normalizes the field; `src/map.js` paints the map fill from a hard-coded `match` expression on `displayImpact`; `src/ui.js` builds the filter checklist; `styles.css` defines `--impact-*` CSS variables and `.impact-*` / `.record-card.*` classes that hard-code colors per category
+**Update (2026-05-05)**: the prep refactor described later in this section has landed. Easement Impact is now registered as the only entry in a `CONFIG.schemes` array and the rest of the runtime reads from that registry. The visible app is unchanged. Adding the next dimension is now a config edit rather than a coordinated change across six files. See `architecture_overview.md` "2026-05-05 Display Schemes Refactor Pass" for the file-by-file delta.
 
-The existing pattern is good: priority order and colors are config-driven, and most of the runtime accepts any string value. The tightly coupled bits are the literal `match` expression in the Mapbox paint and the per-category CSS class names.
+The dimension is wired through three layers:
+- **Data**: `impactCategory` field on each row in `data/row-impacts.json`
+- **Configuration**: a `schemes` array in `src/config.js` (Easement Impact is the only entry today), plus `defaultSchemeId`
+- **Render path**: `src/data-model.js` normalizes any scheme's source field; `src/map.js` builds the Mapbox `match` expression from the active scheme; `src/ui.js` builds the filter checklist and applies inline colors from the scheme; `styles.css` retains only structural classes
+
+The render path is now scheme-agnostic. The remaining tight coupling is the placeholder-row exclusion in `prepareImpactData`, which intentionally stays tied to `impactCategory` because it is a spreadsheet-cleanup concern rather than a general scheme concern.
 
 ### What's coming
 
@@ -109,15 +111,17 @@ Color drives one scheme; an icon, border style, or hatch pattern drives another.
 
 ### What this means for the current codebase
 
-The CSS and JS architecture needs three small adjustments before any second dimension is added:
+The CSS and JS architecture needs three small adjustments before any second dimension is added. **All three landed in the 2026-05-05 refactor pass.**
 
-1. **Replace hard-coded category classes with data-driven inline color application.** `.impact-extra-high`, `.impact-high`, etc. should not encode colors in `styles.css`. The colors should come from the active scheme and be applied via inline `style="..."`. Class names can stay as structural hooks for layout.
+1. ~~**Replace hard-coded category classes with data-driven inline color application.**~~ Done. `.impact-*` color classes were removed from `styles.css`. Colors now come from `scheme.values` and are applied via inline `style="..."`. Structural classes (`.scheme-dot`, `.record-card`) remain.
 
-2. **Replace the hard-coded match expression in `src/map.js`.** The fill paint should be built from the active scheme's values list, not literal `"Extra High", "#c62828", ...` rows.
+2. ~~**Replace the hard-coded match expression in `src/map.js`.**~~ Done. `buildFillColorExpression(scheme)` constructs the Mapbox `match` expression from the active scheme's values list. `setActiveColorScheme` rebuilds it on switch.
 
-3. **Move the existing Easement Impact configuration into the new scheme structure**, even before adding a second scheme. This is a no-op rename that proves the registry works and gives a single, clean diff to review.
+3. ~~**Move the existing Easement Impact configuration into the new scheme structure.**~~ Done. `CONFIG.schemes` holds it as the only entry; `CONFIG.defaultSchemeId` selects it.
 
-After those three adjustments, adding survey status or outreach status is a config-only change plus a minimal UI affordance to choose between schemes.
+A single-option scheme switcher was also added (proves the registry works end-to-end). Filter state is now stored per scheme, so the eventual color-by + filter-by UX (Option B) does not need another state restructure.
+
+Adding survey status, ROW plans, or outreach is now a config-only change plus a minimal UI affordance if and when the active-dimension model changes from "single dropdown" to Option B's "color-by + filter-by."
 
 ### Open questions for Part 1
 
@@ -129,6 +133,7 @@ After those three adjustments, adding survey status or outreach status is a conf
    Developer response: sidebar for now
 - When a user switches the active scheme, does the filter selection reset, or is it remembered per scheme?
    Developer response: unsure. Use best judgement, make note of implications when presenting plan
+   Implementation note (2026-05-05): per-scheme memory shipped. Each scheme keeps its own selection set; switching dimensions and back restores the previous filter state. This matches what Option B will need natively. Implication: if a user filters Easement Impact down to "Extra High" only, switches to Survey Status, filters that, then switches back, the "Extra High only" state is still there. Tradeoff vs. global reset is that filter state can drift out of view; "Select all" / "Clear all" still work per the active scheme.
 - Do we want the parcel detail card to show all dimensions for a parcel regardless of which scheme is active? (Probably yes - the detail panel is the place to see everything.)
    Developer response: yes. Hover-over pop-up may be modified to show other relevant details (ie, potentially a "Notes or other open-ended field updated by the project team
 ---
