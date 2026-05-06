@@ -23,7 +23,7 @@ export const CONFIG = {
     },
     {
       id: "streets",
-      label: "Streets",
+      label: "OpenStreetMap",
       sourceType: "raster",
       source: {
         tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
@@ -35,23 +35,23 @@ export const CONFIG = {
       isDefault: false,
     },
     {
-      id: "usgs-imagery",
-      label: "USGS Imagery",
+      id: "esri-world",
+      label: "Esri World",
       sourceType: "raster",
       source: {
         tiles: [
-          "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         ],
         tileSize: 256,
         maxzoom: 19,
       },
       attribution:
-        'Imagery courtesy of <a href="https://www.usgs.gov/">USGS</a> The National Map',
+        'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       isDefault: false,
     },
     {
       id: "carto-positron",
-      label: "Positron",
+      label: "Light",
       sourceType: "raster",
       source: {
         tiles: [
