@@ -122,7 +122,7 @@ export function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-export function prepareImpactData(rawRows, schemes) {
+export function prepareImpactData(rawRows, schemes, parcelOverlayByNumber = new Map()) {
   const cleanedRows = [];
   const excludedCleanupRows = [];
 
@@ -143,13 +143,15 @@ export function prepareImpactData(rawRows, schemes) {
     );
     const exclude = parcelNumber.includes("X") || placeholderRow || cleanupRow;
 
+    const overlay = parcelOverlayByNumber.get(parcelNumber) || {};
     const normalizedRow = {
       ...row,
+      ...overlay,
       uid: `row-${index + 1}`,
       parcelKeys: buildParcelLookupKeys(parcelNumber),
     };
     schemes.forEach((scheme) => {
-      normalizedRow[scheme.field] = normalizeSchemeValue(scheme, row[scheme.field]);
+      normalizedRow[scheme.field] = normalizeSchemeValue(scheme, normalizedRow[scheme.field]);
     });
 
     if (exclude) excludedCleanupRows.push(normalizedRow);

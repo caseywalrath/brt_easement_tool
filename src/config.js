@@ -1,5 +1,6 @@
 export const CONFIG = {
   dataUrl: "./data/row-impacts.json",
+  parcelSurveyStatusUrl: "./data/parcel-survey-status.json",
   mapboxToken: "pk.eyJ1Ijoid2FsdGVyc2NoZWliIiwiYSI6ImNtbTVnY2lkYTA2ZmYycW9tbG5nMnoxbmYifQ.tMOP6wo0LKSy0gCsmfrCQQ",
   initialCenter: [-105.0255, 39.7489],
   initialZoom: 12.8,
@@ -50,6 +51,20 @@ export const CONFIG = {
       fallbackValueId: "Other",
       helperText:
         "Parcels with multiple spreadsheet rows stay visible if at least one matching row is checked.",
+    },
+    {
+      id: "parcel-survey-status",
+      label: "Parcel Survey Status",
+      field: "surveyStatus",
+      values: [
+        { id: "Not Surveyed", color: "#c62828" },
+        { id: "Unknown", color: "#fdd835" },
+        { id: "Surveyed", color: "#2e7d32" },
+      ],
+      rollup: "highest-priority",
+      fallbackValueId: "Unknown",
+      helperText:
+        "Synthetic prototype data: 100 parcels are flagged Surveyed or Not Surveyed; the rest default to Unknown.",
     },
   ],
   defaultSchemeId: "easement-impact",

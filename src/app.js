@@ -60,8 +60,11 @@ async function initializeApp() {
   renderDetailPlaceholder(dom.parcelDetailsEl, CONFIG.detailPlaceholderText);
 
   try {
-    const rawRows = await loadImpactRows(CONFIG.dataUrl);
-    state.dataModel = prepareImpactData(rawRows, CONFIG.schemes);
+    const [rawRows, parcelOverlayByNumber] = await Promise.all([
+      loadImpactRows(CONFIG.dataUrl),
+      loadParcelOverlay(CONFIG.parcelSurveyStatusUrl),
+    ]);
+    state.dataModel = prepareImpactData(rawRows, CONFIG.schemes, parcelOverlayByNumber);
 
     state.schemeSwitcher = initSchemeSwitcher({
       dom,
@@ -152,6 +155,23 @@ async function loadImpactRows(dataUrl) {
   const rows = await response.json();
   if (!Array.isArray(rows)) throw new Error("Expected row-impacts.json to contain an array");
   return rows;
+}
+
+async function loadParcelOverlay(overlayUrl) {
+  if (!overlayUrl) return new Map();
+  const response = await fetch(overlayUrl);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const entries = await response.json();
+  if (!Array.isArray(entries)) throw new Error("Expected parcel overlay file to contain an array");
+  const overlay = new Map();
+  entries.forEach((entry) => {
+    const parcelNumber = String(entry?.parcelNumber || "").trim();
+    if (!parcelNumber) return;
+    const { parcelNumber: _ignored, ...fields } = entry;
+    overlay.set(parcelNumber, fields);
+  });
+  return overlay;
 }
 
 function handleValueChange(valueId, isChecked) {
