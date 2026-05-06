@@ -148,7 +148,7 @@ export function initBasemapSwitcher({ basemaps, activeBasemapId, onBasemapChange
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-checked", String(isActive));
       const indicatorEl = button.querySelector(".basemap-option-indicator");
-      if (indicatorEl) indicatorEl.textContent = isActive ? "Selected" : "";
+      if (indicatorEl) indicatorEl.textContent = isActive ? "✓" : "";
     });
   }
 
@@ -183,9 +183,9 @@ export function initBasemapSwitcher({ basemaps, activeBasemapId, onBasemapChange
       toggleBtn.className = "basemap-toggle";
       toggleBtn.setAttribute("aria-haspopup", "menu");
       toggleBtn.innerHTML =
-        `<span class="basemap-toggle-icon" aria-hidden="true">` +
-        `<span></span><span></span><span></span>` +
-        `</span>` +
+        `<svg class="basemap-toggle-icon" aria-hidden="true" viewBox="0 0 16 16" width="14" height="14">` +
+        `<path fill="currentColor" d="M8 1.2 1.2 4.5 8 7.8l6.8-3.3zM1.2 8l6.8 3.3L14.8 8 13.4 7.3 8 9.9 2.6 7.3zm0 3.5L8 14.8l6.8-3.3-1.4-.7L8 13.4l-5.4-2.6z"/>` +
+        `</svg>` +
         `<span class="visually-hidden">Open basemap options</span>`;
       toggleBtn.addEventListener("click", (event) => {
         event.stopPropagation();

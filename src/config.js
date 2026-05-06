@@ -34,6 +34,39 @@ export const CONFIG = {
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       isDefault: false,
     },
+    {
+      id: "usgs-imagery",
+      label: "USGS Imagery",
+      sourceType: "raster",
+      source: {
+        tiles: [
+          "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+        ],
+        tileSize: 256,
+        maxzoom: 19,
+      },
+      attribution:
+        'Imagery courtesy of <a href="https://www.usgs.gov/">USGS</a> The National Map',
+      isDefault: false,
+    },
+    {
+      id: "carto-positron",
+      label: "Positron",
+      sourceType: "raster",
+      source: {
+        tiles: [
+          "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+          "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+          "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+          "https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        ],
+        tileSize: 256,
+        maxzoom: 20,
+      },
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      isDefault: false,
+    },
   ],
   schemes: [
     {
